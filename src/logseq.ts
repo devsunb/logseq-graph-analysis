@@ -9,7 +9,7 @@ export interface Page {
   "journal?": boolean;
   name: string;
   properties?: {
-    graphHide?: boolean;
+    excludeFromGraphView?: boolean;
     alias?: string[];
     icon?: string;
     pageIcon?: string;

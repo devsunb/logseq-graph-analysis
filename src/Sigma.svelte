@@ -1,28 +1,21 @@
 <script lang="ts">
-  import {
-    onMount,
-    onDestroy,
-    createEventDispatcher,
-    afterUpdate,
-  } from "svelte";
+  import { afterUpdate, createEventDispatcher, onDestroy, onMount, } from "svelte";
   import Sigma from "sigma";
   import FA2Layout from "graphology-layout-forceatlas2/worker";
   import forceAtlas2 from "graphology-layout-forceatlas2";
   import type Graph from "graphology";
   import type { SigmaNodeEventPayload } from "sigma/sigma";
   import type { Attributes } from "graphology-types";
-  import type { EdgeDisplayData, NodeDisplayData } from "sigma/types";
+  import type { EdgeDisplayData, NodeDisplayData, PartialButFor } from "sigma/types";
   import { Mode, settings } from "./stores";
   import { adamicAdar, coCitation, ResultMap } from "./analysis";
-  import {
-    shortestPathDirected,
-    shortestPathUndirected,
-    shortestPathEdgePredicate,
-  } from "./shortestPath";
+  import { shortestPathDirected, shortestPathEdgePredicate, shortestPathUndirected, } from "./shortestPath";
   import { nodeNameIndex } from "./graph";
 
   import CircleNodeProgram from "sigma/rendering/webgl/programs/node.fast";
   import getNodeProgramImage from "sigma/rendering/webgl/programs/node.image";
+  import drawLabel from "sigma/rendering/canvas/label";
+  import type { Settings } from "sigma/settings";
 
   export let graph: Graph;
 
@@ -32,30 +25,69 @@
 
   const dispatch = createEventDispatcher();
 
+  const white = "#ffffff";
   const red = "#f87171";
   const orange = "#fb923c";
-  const grey = "#a3a3a3";
+  const grey = "#777777";
+  const labelColor = "#cccccc";
+  const backgroundColor = "#212123";
+
+  function drawHover(
+    context: CanvasRenderingContext2D,
+    data: PartialButFor<NodeDisplayData, "x" | "y" | "size" | "label" | "color">,
+    settings: Settings,
+  ): void {
+    const size = settings.labelSize, font = settings.labelFont, weight = settings.labelWeight;
+    context.font = `${weight} ${size}px ${font}`;
+    context.fillStyle = backgroundColor;
+    context.shadowColor = white;
+    context.shadowOffsetX = 0;
+    context.shadowOffsetY = 0;
+    context.shadowBlur = 8;
+
+    const PADDING = 2;
+    const textWidth = context.measureText(data.label).width,
+      boxWidth = Math.round(textWidth + 5),
+      boxHeight = Math.round(size + 2 * PADDING),
+      radius = Math.max(data.size, size / 2) + PADDING;
+    const angleRadian = Math.asin(boxHeight / 2 / radius);
+    const xDeltaCoord = Math.sqrt(Math.abs(Math.pow(radius, 2) - Math.pow(boxHeight / 2, 2)));
+    context.beginPath();
+    context.moveTo(data.x + xDeltaCoord, data.y + boxHeight / 2);
+    context.lineTo(data.x + radius + boxWidth, data.y + boxHeight / 2);
+    context.lineTo(data.x + radius + boxWidth, data.y - boxHeight / 2);
+    context.lineTo(data.x + xDeltaCoord, data.y - boxHeight / 2);
+    context.arc(data.x, data.y, radius, angleRadian, -angleRadian);
+    context.closePath();
+    context.fill();
+
+    context.shadowOffsetX = 0;
+    context.shadowOffsetY = 0;
+    context.shadowBlur = 0;
+
+    drawLabel(context, data, settings);
+  }
 
   onMount(async () => {
-    const g = graph;
-    sigma = new Sigma(g, sigmaRef, {
+    sigma = new Sigma(graph, sigmaRef, {
       allowInvalidContainer: true,
       nodeReducer,
       edgeReducer,
       defaultNodeColor: grey,
+      defaultEdgeColor: grey,
+      labelColor: { color: labelColor },
+      hoverRenderer: drawHover,
       nodeProgramClasses: {
         circle: CircleNodeProgram,
         image: getNodeProgramImage(),
       }
     });
     sigma.on("clickNode", handleNodeClick);
-    
-    if($settings.cameraState) {
+    if ($settings.cameraState) {
       sigma.getCamera().setState($settings.cameraState);
     }
     let threshold = $settings.labelThreshold
     sigma.setSetting("labelRenderedSizeThreshold", threshold)
-    
   });
 
   afterUpdate(() => {
@@ -244,14 +276,14 @@
   };
 </script>
 
-<div class="sigma" bind:this={sigmaRef} />
+<div class="sigma" bind:this={sigmaRef}/>
 
 <style>
-  .sigma {
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-  }
+    .sigma {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
 </style>

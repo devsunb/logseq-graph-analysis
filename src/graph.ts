@@ -1,47 +1,41 @@
-import type {
-  BlockEntity,
-  BlockIdentity,
-  EntityID,
-} from "@logseq/libs/dist/LSPlugin";
-import Graph from "graphology";
-import random from "graphology-layout/random";
-import { singleSourceLength } from "graphology-shortest-path";
-import { toUndirected } from "graphology-operators";
-import {
-  blockToReferences,
-  refToPageRef,
-  Page,
-  Block,
-  getBlockFn,
-} from "./logseq";
+import type { BlockEntity, BlockIdentity, EntityID } from '@logseq/libs/dist/LSPlugin';
+import Graph from 'graphology';
+import random from 'graphology-layout/random';
+import { singleSourceLength } from 'graphology-shortest-path';
+import { toUndirected } from 'graphology-operators';
+import { Block, blockToReferences, getBlockFn, Page, refToPageRef } from './logseq';
+
+function isJournal(page: Page) {
+  return page['journal?']
+    || page.name.match(/[일월화수목금토]요일/)
+    || page.name.match(/\d+월 \d+일/);
+}
 
 type getAllPagesFn = () => Promise<Page[]>;
 type getBlockReferencesFn = () => Promise<Block[][]>;
-type getSettingsFn = () => { journal: boolean };
 
 export async function buildGraph(
   getAllPages: getAllPagesFn,
   getBlockReferences: getBlockReferencesFn,
-  getSettings: getSettingsFn,
-  getBlock: getBlockFn
+  getBlock: getBlockFn,
+  journalsEnabled: boolean
 ): Promise<Graph> {
-  console.log("building graph");
+  console.log('building graph');
 
   const g = new Graph();
   let pages = await getAllPages();
   const aliases = pagesToAliasMap(pages);
   pages = removeAliases(aliases, pages);
-  const journals = pages.filter((p) => p["journal?"]);
+  const journals = pages.filter((p) => isJournal(p));
 
   for (const page of pages) {
-    if (page.properties && page.properties.graphHide) {
+    if (page.properties && page.properties.excludeFromGraphView) {
       continue;
     }
     if (g.hasNode(page.id)) {
       continue;
     }
-
-    if (getSettings().journal !== true && page["journal?"]) {
+    if (!journalsEnabled && isJournal(page)) {
       continue;
     }
 
@@ -50,15 +44,15 @@ export async function buildGraph(
     g.addNode(page.id, {
       ...(icon
         ? {
-            type: "image",
-            image: `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='1.1em' x='0.2em' font-size='70'>${icon}</text></svg>`,
-          }
+          type: 'image',
+          image: `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='1.1em' x='0.2em' font-size='70'>${icon}</text></svg>`
+        }
         : {
-            type: "circle",
-          }),
+          type: 'circle'
+        }),
       label: page.name,
       aliases: pageToAliases(page, true),
-      rawAliases: pageToAliases(page, false),
+      rawAliases: pageToAliases(page, false)
     });
   }
 
@@ -67,7 +61,7 @@ export async function buildGraph(
   for (const block of results.flat()) {
     if (block.refs) {
       for (const ref of blockToReferences(
-        getSettings().journal === true,
+        journalsEnabled,
         journals,
         block
       )) {
@@ -84,7 +78,7 @@ export async function buildGraph(
             g.updateDirectedEdgeAttribute(
               ref.source,
               targetRef,
-              "weight",
+              'weight',
               (weight) => weight + 1
             );
           }
@@ -185,7 +179,7 @@ export function filter(
 
 if (import.meta.vitest) {
   const { it, expect, describe, vi } = import.meta.vitest;
-  describe("buildGraph", () => {
+  describe('buildGraph', () => {
     function graphToJson(graph: Graph) {
       const json = graph.toJSON();
       json.edges.forEach((e) => {
@@ -199,279 +193,279 @@ if (import.meta.vitest) {
       return json;
     }
 
-    it("creates a graph with edges", async () => {
+    it('creates a graph with edges', async () => {
       const getAllPages = async () => [
-        { id: 1, "journal?": false, name: "A" },
-        { id: 2, "journal?": false, name: "B" },
+        { id: 1, 'journal?': false, name: 'A' },
+        { id: 2, 'journal?': false, name: 'B' }
       ];
       const getBlockReferences = async () => [
         [
           {
             refs: [{ id: 2 }],
-            "path-refs": [{ id: 1 }, { id: 2 }],
-            page: { id: 1 },
-          },
-        ],
+            'path-refs': [{ id: 1 }, { id: 2 }],
+            page: { id: 1 }
+          }
+        ]
       ];
-      const getSettings = () => ({ journal: false });
+      const journalsEnabled = false;
       const getBlock = async (ref: BlockIdentity | EntityID) => null;
       const graph = await buildGraph(
         getAllPages,
         getBlockReferences,
-        getSettings,
-        getBlock
+        getBlock,
+        journalsEnabled
       );
       expect(graphToJson(graph)).toMatchSnapshot();
     });
 
-    it("increases the weight for multiple edges", async () => {
+    it('increases the weight for multiple edges', async () => {
       const getAllPages = async () => [
-        { id: 1, "journal?": false, name: "A" },
-        { id: 2, "journal?": false, name: "B" },
+        { id: 1, 'journal?': false, name: 'A' },
+        { id: 2, 'journal?': false, name: 'B' }
       ];
       const getBlockReferences = async () => [
         [
           {
             refs: [{ id: 2 }],
-            "path-refs": [{ id: 1 }, { id: 2 }],
-            page: { id: 1 },
+            'path-refs': [{ id: 1 }, { id: 2 }],
+            page: { id: 1 }
           },
           {
             refs: [{ id: 2 }],
-            "path-refs": [{ id: 1 }, { id: 2 }],
-            page: { id: 1 },
-          },
-        ],
+            'path-refs': [{ id: 1 }, { id: 2 }],
+            page: { id: 1 }
+          }
+        ]
       ];
-      const getSettings = () => ({ journal: false });
+      const journalsEnabled = false;
       const getBlock = async (ref: BlockIdentity | EntityID) => null;
       const graph = await buildGraph(
         getAllPages,
         getBlockReferences,
-        getSettings,
-        getBlock
+        getBlock,
+        journalsEnabled
       );
       expect(graphToJson(graph)).toMatchSnapshot();
     });
 
-    it("shows journal pages when requested", async () => {
+    it('shows journal pages when requested', async () => {
       const getAllPages = async () => [
-        { id: 1, "journal?": false, name: "A" },
-        { id: 2, "journal?": true, name: "B" },
+        { id: 1, 'journal?': false, name: 'A' },
+        { id: 2, 'journal?': true, name: 'B' }
       ];
       const getBlockReferences = async () => [
         [
           {
             refs: [{ id: 2 }],
-            "path-refs": [{ id: 1 }, { id: 2 }],
-            page: { id: 1 },
-          },
-        ],
+            'path-refs': [{ id: 1 }, { id: 2 }],
+            page: { id: 1 }
+          }
+        ]
       ];
-      const getSettings = () => ({ journal: true });
+      const journalsEnabled = false;
       const getBlock = async (ref: BlockIdentity | EntityID) => null;
       const graph = await buildGraph(
         getAllPages,
         getBlockReferences,
-        getSettings,
-        getBlock
+        getBlock,
+        journalsEnabled
       );
       expect(graphToJson(graph)).toMatchSnapshot();
     });
 
-    it("does not shows journal pages when not requested", async () => {
+    it('does not shows journal pages when not requested', async () => {
       const getAllPages = async () => [
-        { id: 1, "journal?": false, name: "A" },
-        { id: 2, "journal?": true, name: "B" },
+        { id: 1, 'journal?': false, name: 'A' },
+        { id: 2, 'journal?': true, name: 'B' }
       ];
       const getBlockReferences = async () => [
         [
           {
             refs: [{ id: 2 }],
-            "path-refs": [{ id: 1 }, { id: 2 }],
-            page: { id: 1 },
-          },
-        ],
+            'path-refs': [{ id: 1 }, { id: 2 }],
+            page: { id: 1 }
+          }
+        ]
       ];
-      const getSettings = () => ({ journal: false });
+      const journalsEnabled = false;
       const getBlock = async (ref: BlockIdentity | EntityID) => null;
       const graph = await buildGraph(
         getAllPages,
         getBlockReferences,
-        getSettings,
-        getBlock
+        getBlock,
+        journalsEnabled
       );
       expect(graphToJson(graph)).toMatchSnapshot();
     });
 
-    it("links graphs to nested parents", async () => {
+    it('links graphs to nested parents', async () => {
       const getAllPages = async () => [
-        { id: 1, "journal?": false, name: "A" },
-        { id: 2, "journal?": false, name: "B" },
-        { id: 3, "journal?": false, name: "C" },
+        { id: 1, 'journal?': false, name: 'A' },
+        { id: 2, 'journal?': false, name: 'B' },
+        { id: 3, 'journal?': false, name: 'C' }
       ];
       const getBlockReferences = async () => [
         [
           {
             refs: [{ id: 2 }],
-            "path-refs": [{ id: 1 }, { id: 2 }],
-            page: { id: 1 },
+            'path-refs': [{ id: 1 }, { id: 2 }],
+            page: { id: 1 }
           },
           {
             refs: [{ id: 3 }],
-            "path-refs": [{ id: 1 }, { id: 2 }, { id: 3 }],
-            page: { id: 1 },
-          },
-        ],
+            'path-refs': [{ id: 1 }, { id: 2 }, { id: 3 }],
+            page: { id: 1 }
+          }
+        ]
       ];
-      const getSettings = () => ({ journal: false });
+      const journalsEnabled = false;
       const getBlock = async (ref: BlockIdentity | EntityID) => null;
       const graph = await buildGraph(
         getAllPages,
         getBlockReferences,
-        getSettings,
-        getBlock
+        getBlock,
+        journalsEnabled
       );
       expect(graphToJson(graph)).toMatchSnapshot();
     });
 
-    it("handles block references", async () => {
+    it('handles block references', async () => {
       const getAllPages = async () => [
-        { id: 1, "journal?": false, name: "A" },
-        { id: 2, "journal?": false, name: "B" },
+        { id: 1, 'journal?': false, name: 'A' },
+        { id: 2, 'journal?': false, name: 'B' }
       ];
       const getBlockReferences = async () => [
         [
           {
             refs: [{ id: 3 }],
-            "path-refs": [{ id: 1 }, { id: 3 }],
-            page: { id: 1 },
-          },
-        ],
+            'path-refs': [{ id: 1 }, { id: 3 }],
+            page: { id: 1 }
+          }
+        ]
       ];
-      const getSettings = () => ({ journal: false });
+      const journalsEnabled = false;
       const getBlock = vi
         .fn()
         .mockImplementationOnce(() => ({ page: { id: 2 } } as BlockEntity));
       const graph = await buildGraph(
         getAllPages,
         getBlockReferences,
-        getSettings,
-        getBlock
+        getBlock,
+        journalsEnabled
       );
       expect(getBlock).toBeCalledWith(3);
       expect(graphToJson(graph)).toMatchSnapshot();
     });
 
-    it("skips references to journal pages", async () => {
+    it('skips references to journal pages', async () => {
       const getAllPages = async () => [
-        { id: 1, "journal?": false, name: "A" },
-        { id: 2, "journal?": true, name: "B" },
-        { id: 3, "journal?": false, name: "C" },
+        { id: 1, 'journal?': false, name: 'A' },
+        { id: 2, 'journal?': true, name: 'B' },
+        { id: 3, 'journal?': false, name: 'C' }
       ];
       const getBlockReferences = async () => [
         [
           {
             refs: [{ id: 2 }],
-            "path-refs": [{ id: 1 }, { id: 2 }],
-            page: { id: 1 },
+            'path-refs': [{ id: 1 }, { id: 2 }],
+            page: { id: 1 }
           },
           {
             refs: [{ id: 3 }],
-            "path-refs": [{ id: 1 }, { id: 2 }, { id: 3 }],
-            page: { id: 1 },
-          },
-        ],
+            'path-refs': [{ id: 1 }, { id: 2 }, { id: 3 }],
+            page: { id: 1 }
+          }
+        ]
       ];
-      const getSettings = () => ({ journal: false });
+      const journalsEnabled = false;
       const getBlock = async (ref: BlockIdentity | EntityID) => null;
       const graph = await buildGraph(
         getAllPages,
         getBlockReferences,
-        getSettings,
-        getBlock
+        getBlock,
+        journalsEnabled
       );
       expect(graphToJson(graph)).toMatchSnapshot();
     });
 
-    it("skips pages with graph-hide: true", async () => {
+    it('skips pages with graph-hide: true', async () => {
       const getAllPages = async () => [
-        { id: 1, "journal?": false, name: "A" },
+        { id: 1, 'journal?': false, name: 'A' },
         {
           id: 2,
-          "journal?": false,
-          name: "B",
-          properties: { graphHide: true },
-        },
+          'journal?': false,
+          name: 'B',
+          properties: { excludeFromGraphView: true }
+        }
       ];
       const getBlockReferences = async () => [
         [
           {
             refs: [{ id: 2 }],
-            "path-refs": [{ id: 1 }, { id: 2 }],
-            page: { id: 1 },
-          },
-        ],
+            'path-refs': [{ id: 1 }, { id: 2 }],
+            page: { id: 1 }
+          }
+        ]
       ];
-      const getSettings = () => ({ journal: false });
+      const journalsEnabled = false;
       const getBlock = async (ref: BlockIdentity | EntityID) => null;
       const graph = await buildGraph(
         getAllPages,
         getBlockReferences,
-        getSettings,
-        getBlock
+        getBlock,
+        journalsEnabled
       );
       expect(graphToJson(graph)).toMatchSnapshot();
     });
 
-    it("merges alias nodes", async () => {
+    it('merges alias nodes', async () => {
       const getAllPages = async () => [
-        { id: 1, "journal?": false, name: "A", properties: { alias: ["B"] } },
-        { id: 2, "journal?": false, name: "B" },
-        { id: 3, "journal?": false, name: "C" },
+        { id: 1, 'journal?': false, name: 'A', properties: { alias: ['B'] } },
+        { id: 2, 'journal?': false, name: 'B' },
+        { id: 3, 'journal?': false, name: 'C' }
       ];
       const getBlockReferences = async () => [
         [
           {
             refs: [{ id: 2 }],
-            "path-refs": [{ id: 3 }, { id: 2 }],
-            page: { id: 3 },
-          },
-        ],
+            'path-refs': [{ id: 3 }, { id: 2 }],
+            page: { id: 3 }
+          }
+        ]
       ];
-      const getSettings = () => ({ journal: false });
+      const journalsEnabled = false;
       const getBlock = async (ref: BlockIdentity | EntityID) => null;
       const graph = await buildGraph(
         getAllPages,
         getBlockReferences,
-        getSettings,
-        getBlock
+        getBlock,
+        journalsEnabled
       );
       expect(graphToJson(graph)).toMatchSnapshot();
     });
 
-    it("links shared references in a block", async () => {
+    it('links shared references in a block', async () => {
       const getAllPages = async () => [
-        { id: 1, "journal?": false, name: "A" },
-        { id: 2, "journal?": false, name: "B" },
-        { id: 3, "journal?": false, name: "C" },
+        { id: 1, 'journal?': false, name: 'A' },
+        { id: 2, 'journal?': false, name: 'B' },
+        { id: 3, 'journal?': false, name: 'C' }
       ];
       const getBlockReferences = async () => [
         [
           {
             refs: [{ id: 2 }, { id: 3 }],
-            "path-refs": [{ id: 1 }, { id: 2 }, { id: 3 }],
-            page: { id: 1 },
-          },
-        ],
+            'path-refs': [{ id: 1 }, { id: 2 }, { id: 3 }],
+            page: { id: 1 }
+          }
+        ]
       ];
-      const getSettings = () => ({ journal: false });
+      const journalsEnabled = false;
       const getBlock = async (ref: BlockIdentity | EntityID) => null;
       const graph = await buildGraph(
         getAllPages,
         getBlockReferences,
-        getSettings,
-        getBlock
+        getBlock,
+        journalsEnabled
       );
       expect(graphToJson(graph)).toMatchSnapshot();
     });
